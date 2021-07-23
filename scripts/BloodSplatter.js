@@ -167,7 +167,9 @@ class BloodSplatter {
         ? 300 - canvas.background.BloodSplatter?.violence * 20
         : 100;
       setTimeout(() => {
-        if (BloodSplatter.belowTreshold(this.actor)) {
+        const reverseHp = game.settings.get("splatter", "reverseHp");
+
+        if ((!reverseHp && BloodSplatter.belowTreshold(this.actor)) || (reverseHp && BloodSplatter.belowTresholdReverse(this.actor))) {
           if (canvas.background.BloodSplatter) {
             canvas.background.BloodSplatter.SplatFromToken(this, {
               extraScale: Math.random() * 0.5,
@@ -210,33 +212,58 @@ class BloodSplatter {
     if (!actor) return false;
     const hpMax = BloodSplatter.getHpMax(actor.data);
     const hpVal = BloodSplatter.getHpVal(actor.data);
-    if (
-      (100 * hpVal) / hpMax <=
-      game.settings.get("splatter", "bloodsplatterThreshold")
-    )
-      return true;
-    return false;
+
+    return (this.getHpPercentage(hpVal, hpMax) <= game.settings.get("splatter", "bloodsplatterThreshold"))
   }
+
+  static belowTresholdReverse(actor) {
+    if (!actor) return false;
+    const hpMax = BloodSplatter.getHpMax(actor.data);
+    const hpVal = BloodSplatter.getHpVal(actor.data);
+
+    return (this.getHpPercentageReverse(hpVal, hpMax) <= game.settings.get("splatter", "bloodsplatterThreshold"))
+  }
+
+
   static getHpVal(actorData) {
     return Object.byString(
       actorData,
       game.settings.get("splatter", "currentHp")
     );
   }
+
   static getHpMax(actorData) {
     return Object.byString(actorData, game.settings.get("splatter", "maxHp"));
   }
+
   static getCreatureType(actorData) {
     return Object.byString(
       actorData,
       game.settings.get("splatter", "creatureType")
     );
   }
+
   static getCreatureTypeCustom(actorData) {
     return Object.byString(
       actorData,
       game.settings.get("splatter", "creatureTypeCustom")
     );
+  }
+
+  static getHpPercentageReverse(hpVal, hpMax) {
+    return ((hpMax - hpVal) * 100) / hpMax;
+  }
+
+  static getHpPercentage(hpVal, hpMax) {
+    return (100 * hpVal) / hpMax;
+  }
+
+  static calculateImpact(oldHpVal, hpVal, hpMax) {
+    return (oldHpVal - hpVal) / hpMax + 0.7;
+  }
+
+  static calculateImpactReverse(oldHpVal, hpVal, hpMax) {
+    return (oldHpVal + hpVal) / hpMax + 0.7;
   }
 }
 
@@ -255,20 +282,30 @@ Hooks.on("updateActor", function (actor, updates) {
   if (
     !game.settings.get("splatter", "enableBloodsplatter") ||
     (game.settings.get("splatter", "onlyInCombat") && !game.combat?.started)
-  )
+  ) {
     return;
-  let token = actor.parent
-    ? canvas.tokens.get(actor.parent.id)
-    : canvas.tokens.placeables.find((t) => t.actor.id == actor.id);
+  }
+
+  let token = actor.parent ? canvas.tokens.get(actor.parent.id) : canvas.tokens.placeables.find((t) => t.actor.id === actor.id);
   const hpMax = BloodSplatter.getHpMax(actor.data);
-  const oldHpVal = updates.oldHpVal; //BloodSplatter.getHpVal(actor.data);
   const hpVal = BloodSplatter.getHpVal(updates);
-  const impactScale = (oldHpVal - hpVal) / hpMax + 0.7;
-  if (
-    hpVal != undefined &&
-    hpVal <= oldHpVal &&
-    (100 * hpVal) / hpMax <=
-      game.settings.get("splatter", "bloodsplatterThreshold")
+  const oldHpVal = updates.oldHpVal;
+  const reverseHp = game.settings.get("splatter", "reverseHp");
+  let impactScale = 0;
+
+  if (reverseHp) {
+    impactScale = BloodSplatter.calculateImpactReverse(oldHpVal,hpVal,hpMax)
+  } else {
+    impactScale = BloodSplatter.calculateImpact(oldHpVal, hpVal, hpMax)
+  }
+
+
+  if (hpVal !== undefined &&
+      (
+          (!reverseHp && hpVal <= oldHpVal && BloodSplatter.getHpPercentage(hpVal, hpMax) <= game.settings.get("splatter", "bloodsplatterThreshold"))
+          ||
+          (reverseHp && hpVal >= oldHpVal && BloodSplatter.getHpPercentageReverse(hpVal, hpMax) <= game.settings.get("splatter", "bloodsplatterThreshold"))
+      )
   ) {
     const delay = game.settings.get("splatter", "bloodsplatterDelay");
 
@@ -278,11 +315,11 @@ Hooks.on("updateActor", function (actor, updates) {
         canvas.background.BloodSplatter.SplatFromToken(token, {
           extraScale: impactScale,
         });
-      } else {
-        canvas.background.BloodSplatter.SplatFromToken(token, {
-          extraScale: impactScale,
-        });
+        return;
       }
+      canvas.background.BloodSplatter.SplatFromToken(token, {
+        extraScale: impactScale,
+      });
     }, delay);
   }
 });
@@ -291,3 +328,4 @@ Hooks.on("canvasReady", function () {
   if (canvas.background.BloodSplatter)
     canvas.background.BloodSplatter.Destroy();
 });
+

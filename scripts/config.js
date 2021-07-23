@@ -214,6 +214,15 @@ Hooks.once("init", function () {
     default: "data.details.type.custom",
   });
 
+  game.settings.register("splatter", "reverseHp", {
+    name: game.i18n.localize("splatter.settings.reverseHp.text"),
+    hint: game.i18n.localize("splatter.settings.reverseHp.hint"),
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+
   game.settings.register("splatter", "BloodSheetData", {
     name: "",
     hint: "",
